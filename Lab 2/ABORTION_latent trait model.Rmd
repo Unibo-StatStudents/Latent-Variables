@@ -1,0 +1,201 @@
+---
+title: "Abortion tutorial"
+output:
+  word_document: default
+  html_notebook: default
+---
+
+The data contain responses given by 410 individuals to four out of seven items concerning attitude to abortion. A small number of individual (379) did not answer to some of the questions and this data set contains only the complete cases.
+
+**POINT 1**
+```{r}
+library(ltm) 
+data(Abortion) 
+dim(Abortion) 
+```
+LATENT VARIABLE = APTITUDE TOWARDS ABORTION
+
+**POINT 2**
+*Use the function descript to summarize the principal characteristics of the data set data set.*
+
+We compute the descriptive statistics for dichotomous and polytomous data.
+
+```{r}
+dsc <- descript(Abortion) 
+dsc
+```
+
+
+
+We have many descriptive statistics. The more interesting are:
+
+```{r}
+dsc$perc  #Percentage of people that replied 1 or 0 to each item. For each proportion we have
+#also the logit = log(percentage of 1 responses/percentage of 0 responses) 
+dsc$items  #Frequency distribution of each pattern. 0 means that 103 individuals replied 0 to
+#all the item, 1 means that 33 individual replied 1 to ONE ITEM but we don't know which one.
+dsc$pw.ass  #The p-value corresponds to the chi-square test for the 2by2 table. We are testing
+#independence between binary data. the association between 1 and 4 is significant. The fact
+#that the item are associated makes sense to fit the model.
+```
+
+
+**POINT 3**
+
+
+*Use the function ltm to fit the 2 IRT model to the data. Comment the results.*
+
+We estimate a one latent variable model because in this case we have too few observed
+variables (4).
+```{r}
+m1 <- ltm(Abortion ~ z1)
+summary(m1)
+```
+The first information that we have is the log-likelihood and the converges. Then we have the
+BIC and AIC that can be used in order to different model with different latent variables.
+
+
+```{r}
+m1.rip <- ltm(Abortion ~ z1, IRT.param = FALSE) 
+summary(m1.rip)
+```
+Log-likelihood, BIC and AIC don't change. 
+
+
+*Verify the relation between the parameter estimates in the two parameterizations.*
+
+The relation between the two different parametrisation of the difficulty parameter is:
+```{r}
+-summary(m1)$coefficients[1,1]*summary(m1)$coefficients[5,1] 
+#Get the Latent trait parameter from the 2PL model that is equal to:
+summary(m1.rip)$coefficients[1,1] 
+```
+
+
+**POINT 4**
+
+*Compute the standardized discriminant parameters and the probability of positive response of the* 
+*median individual*
+
+```{r}
+alpha <- m1.rip$coeff[,2]
+stalpha <- alpha/sqrt(1+alpha^2) 
+```
+The highest standardize alpha correspond to item 3 that is the most discriminating parameter
+because it is the parameter with the highest value.
+
+It is also possible to display the probabilities of positive response of the median individual. 
+The option order=TRUE this means that the output is ordered with increasing probabilities.
+```{r}
+coef(m1.rip,prob=TRUE,order=TRUE)
+```
+
+**POINT 6**
+
+*Represent the characteristic curves of the four items for the estimated model. Comment the results.*
+
+```{r}
+plot(m1, legend = TRUE, cx = 'bottomright', xlab='Attitude toward abortion', lwd = 3,
+     cex.main = 1.5, cex.lab = 1.3, cex = 1.1)
+```
+We have a different curve for each item.
+Item 1 is the most difficult, while the most discriminating item is item 3.
+
+
+**POINT 7**
+*Based on the obtained results evaluate if the model has a good fit to the data.*
+The statistics that we can compute are the chisquare and the LRT.
+
+CHI-SQUARE
+```{r}
+E <-fitted(m1)[,5] #Expected frequencies
+O <- m1$patterns$obs #Observed frequencies
+cbind(m1$pattern$X,O,E) #Verify if there are SPARSE DATA -- For patterns 9,11,12 the EXPECTED
+#frequencies are very low, LOWER THAN 5, so we can have problems.
+Chisq <- sum((E-O)*2/E)
+DOF <- 14-2*4-1 #Are the same for both the tests. In order to compute it we need to know the
+#possible response patterns which are 2^4=16. But since the observed response pattern are 14
+#this means that we should take 14 as the value in the computation of the DOF. 
+#If theoretical pattern > observed pattern we should use the observed one.
+pvalueC <- 1-pchisq(Chisq, DOF) 
+```
+
+We don't reject if we consider an alpha of 0.01
+
+LRT
+```{r}
+LR <- 2*sum(O*log(O/E)) 
+pvalueLR<-1-pchisq(LR,DOF)
+pvalueLR
+```
+We reject the null hypothesis unless we consider an alpha of 0.001
+
+
+**POINT 7**
+*Use the function margins to compute the values of the two-way and three-way chi-square residuals and* 
+*evaluate if the model has a local goodness of fit to the data*
+
+We can check if these possible rejection (we would reject for an alpha of 0.05) depends on the sparse
+data or on the fact that this model is not a good model for these data. We can check by looking at the residuals for each possible pair of items and each possible combination.
+
+```{r}
+margins(m1) #two-way margins
+margins(m1,type='three-way',nprint=2) #three-way=compare triplets of items
+margins(m1,type='three-way', nprint=2)
+```
+The rule of thumb is that the residuals aren't good if they are greater than 3/4 depending on how we want to be restrictive.
+In this case for every possible couple of items we get very low residuals so the model is a good model and we've rejected only because of sparse data (or otherwise we can add another latent variable).
+Typically 2 or 3 residuals that are greater than 3/4 may represent a problem in the model.
+
+
+**POINT 9**
+*Use the function factor.scores to estimate the values of the latent variable for each individual.*
+
+
+```{r}
+fs<-factor.scores(m1,method='EAP')
+fs 
+```
+We have the values of the factor scores for each indiviual.
+
+```{r}
+Comp <-factor.scores(m1,method='Component') 
+Comp
+```
+
+
+Here we compute the total scores. The total score is the sum of the rows for each response pattern.
+
+```{r}
+resp.pattern <- fs$score.dat[,1:4] 
+total.score <- apply(resp.pattern, 1, sum)
+total.score
+```
+
+
+```{r}
+Cp <- Comp$score.dat[,7] 
+tab <- cbind(fs$score.dat,Cp,total.score) 
+round(tab,3)
+round(tab[order(Cp),],3)
+```
+The lowest score according to each method (IAP, Component, Total score) corresponds to the 103 
+individuals that replied 000 to the three items.
+If you use the IAP or the component method the result is the same in latent trait model, but this is not necessary true for total score method.
+
+
+**POINT 10**
+*Estimate the abilities of the response pattern that do not occur in the data set.*
+The last thing to do is computing the values of the ability for the patterns that we haven't observed 
+(1-0-0-1 and 1-0-1-0). We get the expected frequencies of these patterns.
+```{r}
+fitted(m1,resp.pattern = rbind(c(1,0,0,1),c(1,0,1,0)))
+```
+
+
+
+
+
+
+
+

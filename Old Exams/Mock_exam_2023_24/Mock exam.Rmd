@@ -1,0 +1,151 @@
+---
+title: "Mock exam"
+output:
+  word_document: default
+  html_notebook: default
+---
+
+First load the library and the data set
+```{r}
+library(ltm)
+cheating <- read.table("cheating.txt")
+```
+We have 319 observations and 4 dichotomous variables. 
+
+**POINT 1_A**
+The total number of theoretical response patterns are:
+```{r}
+2^4
+```
+
+
+**POINT 1_B**
+*Which is the item with the highest proportion of no?*
+```{r}
+dsc <- descript(cheating)
+dsc$perc #Contains the percentage of negative and positive responses for each item
+```
+The item that has the highest percentage (proportion) of NO is FRAUD.
+
+
+**POINT 1_C**
+*Which is the observed frequency of the response pattern (0,0,0,0)? And the ob- served frequency of the response pattern (1,1,1,1)?*
+It allow to get a numeric matrix that includes the frequencies for each total score
+```{r}
+dsc$items
+```
+Total score equal to zero means that this is the frequency of the response pattern that has all
+ZERO. So the observed frequency of a response patter all equal to 0 is 207 while in order to
+have the observed frequency of the response pattern of all 1 we look at the total score of 4= we
+have 4 ones--> 2 
+
+
+**POINT 1_D**
+*Are there pairs of items that are not significantly associated? Which are they?*
+It is a matrix that contains th p-values of the pairwise association of the p items. The H0 is
+that the are DEPENDENT.
+The pair items that are not ASSOCIATED are 2-4 and 1-4.
+```{r}
+dsc$pw.ass 
+```
+
+
+**POINT 3_A**
+*Which is the most difficult item? And the easiest one? Report and comment the values of the difficulty parameters for these two items.*
+Fit the latent trait model for only one binary factor
+```{r}
+m1.rip <- ltm(cheating ~ z1,IRT.param=FALSE) #Name of the data set ~ factors
+summary(m1.rip)
+```
+The most difficult item is the one with the lowest intercept so it is LIEEXAM while the easiest
+is COPYEXAM because it has the higher value for the intercept (difficulty parameter). 
+If we want to fit the 2PL model we need to change IRT.param in TRUE.
+
+**POINT 3_B**
+*Rank the items according to the discrimination parameters reporting the values of these coefficients.*
+Rank the items with respect to the discrimination parameter
+```{r}
+alpha <- m1.rip$coefficients[,2]
+alpha
+```
+We can extract and look at the discrimination parameters. LIEEXAM has the largest discrimination parameter so it is the item that discriminates more between individuals, while COPYEXAM is the one with the smallest discrimination parameter.
+
+
+**POINT 4**
+*Compute and comment the standardized alpha’s and the probabilities of the median individual*
+Standardize the discrimination parameter
+```{r}
+stalpha <- alpha/sqrt(1+alpha^2)
+stalpha
+```
+
+What we get is actually the same information of the non-standardized alpha, but these alpha are
+rescaled so they have values that goes from 0 to 1 
+```{r}
+coef(m1.rip, prob = TRUE, order = TRUE)
+```
+
+In the last column we have the probability of Xi when Z=0 --> definition of the probability of
+the median individual. 
+The probability that a median individual (y=0) responds positively to COPIEXAM is the highest,
+while it is the smallest fot LIEXAM. This is natural because COPIEXAM is the easiest item while
+LIEXAM is the most difficult.
+
+**POINT 5**
+*Report the values of the goodness of fit tests, the degrees of freedom and the p-values and comment the goodness of fit of the model. Are the tests reliable? If not why?*
+```{r}
+E <- fitted(m1.rip)[,5] #Expected frequencies
+O <- m1.rip$patterns$obs #Observed frequencies
+cbind(m1.rip$patterns$X, O, E) 
+Chisq <- sum((E-O)^2/E)
+Chisq 
+DOF <- 16-4*2-1 #2^p - p(q+1) - 1
+DOF
+pvalueC <- 1 - pchisq(Chisq, DOF) 
+pvalueC #According to the Chi-square test our model has a good fit to the data
+LR <- 2 * sum(O * log(O/E))
+LR
+pvalueLR <- 1 - pchisq(LR, DOF)
+pvalueLR #According to the LR test our model has a good fit to the data
+```
+But there are some patterns that have expected frequencies lower than 1. So we shouldn't rely on
+the values of these tests because the Chi-square result doesn't hold anymore.
+
+**POINT 6**
+*Which alternative measures of fit can be considered? What do they suggest?*
+We inspect the residuals and in particular the two-way margins
+```{r}
+margins(m1.rip)
+```
+There is just one value greater than 3.7 but our cutoff is 4 so we can conclude that our
+univariate latent trait model has a good fit to the data.
+
+**POINT 7**
+*Give an interpretation of the latent variable, and illustrate the different methods for scaling individuals.*
+```{r}
+fs1 <- factor.scores(m1.rip, method = "Component") #Compute the component scores
+fs <- factor.scores(m1.rip, method = "EAP") #Compute the posterior mean scores
+```
+We get the classification, a score for each pattern observed in the model. To response pattern
+all equal to zero corresponds the lowest score while to the pattern with all ones corresponds
+the highest score of the latent variable.
+
+So the latent variable can be interpreted as the cheating behavior, so people that don't have a
+cheating behavior and have responded NO to all the items have a very low score while people that
+have responded YES have a strong cheating behavior and a highest score of the latent variable.
+
+The two results (Component and EAP) give exactly the same ranking result.
+
+
+There is another way to compute the scores -- TOTAL SCORE
+The rank that we got before (Components and EAP) is different from the following one (TOTAL
+SCORE). 
+```{r}
+resp.pattern <- fs$score.dat[,1:4]
+total.score <- apply(resp.pattern, 1, sum)
+total.score #Total score of the patterns
+round(fs$score.dat[order(total.score),],3) #We get the components scores but what change is the order of the ranking because it is based on the order of the observed variables.
+```
+
+
+

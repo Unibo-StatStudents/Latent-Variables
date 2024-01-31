@@ -1,0 +1,243 @@
+---
+title: "LSAT" 
+output:
+  word_document: default
+  html_notebook: default
+---
+First of all load the library and the data set
+```{r}
+library(ltm)
+data(LSAT)
+```
+
+```{r}
+dsc <- descript(LSAT) 
+```
+
+Percentage of positive and negative responses
+```{r}
+dsc$perc 
+```
+The percentage of positive response of the FIRST item is very high (also the logit is the
+highest), followed by the FIFTH item while the THIRD item is the one where we have half
+positive and half negative proportion of responses. 
+
+Information about the n° of people that has -all zeros, -at least a one, - twice one...
+```{r}
+dsc$items
+```
+For example only three out the total amount of people didn't reply correctly to any item.
+
+Then we can ask for the pairwise association that give us the p-value of the chi square
+for the test of independence for each 2x2 table.
+It is used to verify that the items are associated
+```{r}
+dsc$pw.ass
+```
+Not all items are associated: for example items 1-5, 1-4, 3-5, 2-4 aren't associated. This
+is not the best situation but we can fit the model anyway and try to explain the fact that
+the model isn't so good by exploiting these information.
+
+
+First thing that can be done consist in fitting a Rasch model.
+A model where we assume that the discriminant parameters are all equal to 1 and we
+estimate only the difficulty parameters.
+There is an option in the definition of the model which is "constraint" and through this
+option it is possible to fix the discriminant parameter to a particular and fixed value.
+if the option constraint=NULL that the parameters are estimated under the assumption that
+the estimated parameters are ALL EQUAL.
+
+Classical Rasch Model
+```{r}
+m1<-rasch(data=LSAT, constraint = cbind(ncol(LSAT) + 1, 1), IRT.param=TRUE)
+#constraint = cbind(ncol(LSAT) + 1, 1 ---> this mean that I want the parameter fixed to 1 but I
+#can choose the value that I want. If I don't specify anything then it estimate the value but
+#all the discriminant parameters are equal)
+```
+
+Alternative parametrisation of the Rasch model - GLLVM 
+```{r}
+m1.rip<-rasch(LSAT, IRT.param=FALSE,constraint = cbind(ncol(LSAT) + 1, 1))
+summary(m1) #The discrimination parameter is fixed to 1 and so we don't have the estimation of
+# the Z and of the std err. 
+# The only estimated parameters are the difficulty ones and since we are in the IRT
+# parametrisation the lowest(highest) parameter correspond to the easiest(difficult) item 
+summary(m1.rip)
+# All the values are exactly the same, the only thing that change are the sign of the difficulty
+# parameter.
+```
+
+
+We have to compute the probability of the median individual given the latent variable equal to 0
+```{r}
+coef(m1.rip,prob=TRUE,order=TRUE)
+coef(m1,prob=TRUE,order=TRUE) #
+```
+The solution is coherent with the one that we found with the comment of the difficulty parameters above.
+
+**GOODNESS OF FIT**
+It is likely to have sparse data in this case.
+In the rash case we have a particular command that we can use to verify the goodness of
+the model due to the fact that the asymptotic results of the chi-square and LRT don't
+always hold.
+The solution consist in using the empirical bootstrap distribution of the Pearson chi-square. 
+This bootstrap option is implemented in the ltm packages only for the rash model.
+```{r}
+pval.boot<-GoF.rasch(m1,B=199)
+pval.boot$Tobs #Empirical value of the Pearson chi-square distribution
+pval.boot #P-value 
+```
+So according to the bootstrap distribution of this statistics (Pearson chi square), we do
+not reject the null hypothesis of the one factor model.
+
+It is also possible to compute the asymptotic p-value
+```{r}
+pval.asint1<-pchisq(pval.boot$Tobs, df=30-1-ncol(LSAT)) #We should put the empirical/observed
+#degrees of freedom and not the theoretical ones (30 instead of 32=2^p). So the DF=30-1-n°of
+#parameters estimated
+pval.asint1
+```
+Also in this case it is significant, we accept H0.
+
+Even if from the descriptive analysis we found that some items are not associated, this
+model is still a good model.
+
+
+We can compute the margins in order to verify the LOCAL goodness of fit of the model.
+Because even if the model overall is a good model it is possible that there are some
+problems in terms of residuals (we won't reject the model but we will improve it)
+
+Two-way margins
+```{r}
+margins(m1) 
+```
+They are all good. All the pairwise association between the item is explaind by the model.
+
+Three-way margins
+```{r}
+margins(m1,type="three-way",nprint=2)
+margins(m1,type="three-way",nprint=3)
+```
+There are some problems for items (2,3,4) and (1,3,5). The model doesn't explain
+completely the association between some items.
+
+We can improve it by:
+-relaxing the assumption that the discriminant parameter is = 1 for each item.
+-we estimate the discriminant parameter but we assume that they are all equal for each
+individual. So we assume that all the items discriminate in the same way among smart and not
+smart individuals.
+
+IRT parametrisation
+```{r}
+m2<-rasch(LSAT)
+summary(m2)
+```
+
+GLLVM parametrisation
+```{r}
+m2.rip<-rasch(LSAT,IRT.param=FALSE)
+summary(m2.rip)
+```
+In this case the results of the two different parametrisation are a little bit different
+(but the order is the same) because since we don't fix the value of the discrimination
+parameter there is a different estimation procedure that depends also on the
+discrimination parameter.
+
+To go from one parametrisation to the other the formula are:
+```{r}
+summary(m2)$coefficients[1,1]*summary(m2)$coefficients[6,1] #To get the GLLVM parameter
+summary(m2.rip)$coefficients[1,1] #To get the IRT parameter
+```
+
+In this package for the Rash model there are a lot of possibilities like for example it is
+possible to implement the ANOVA TEST.
+In this case the ANOVA TEST check the hypothesis that all the discriminant parameters are
+equal and fixed to 1 in the population.
+```{r}
+anova(m1,m2) #m1 th H0 hypothesis and m2 is the H1 one.
+```
+We reject the hypothesis under model m1 --> all the discriminant parameters are not all
+equal to 1, m2 is a better model than m1 and this can be seen also from AIC and BIC.
+
+
+Now we can estimate the **latent trait model**.
+
+IRT parametrisation.
+```{r}
+m3<-ltm(LSAT ~ z1)
+summary(m3)
+```
+The discrimination parameters are all estimated now and they are all significant. 
+
+GLLVM parametrisation
+```{r}
+m3.rip<-ltm(LSAT ~ z1, IRT.param=FALSE)
+summary(m3.rip)
+```
+The values of the discrimination parameters are the same as in the IRT parametrisation.
+We can comment these parameters as loadings then we have that the first three items have
+higher loading in ability then the last ones.
+In education topic it is more natural to interpret them as discriminant and difficulty
+parameters.
+
+ANOVA TEST
+Under H0 holds m2 while the alternative hypothesis is that these estimated parameters are
+significantly different one to each other
+```{r}
+anova(m2,m3)
+```
+Accept H0, so the discriminant parameters are all NOT SIGNIFICANTLY DIFFERENT. m2 is the
+reference, the best model.
+
+So we check if the margins are better:
+```{r}
+margins(m2)
+margins(m2, type="three-way",nprint=2)
+```
+They are good. Everything is perfect.
+
+We can plot the item characteristic curves
+```{r}
+plot(m2, legend = TRUE, cx = "bottomright", lwd = 3, cex.main = 1.5, 
+     cex.lab = 1.3, cex =1.1)
+```
+For m2 the curves don't cross (they are all parallel) because they have all the same 
+discriminant parameter. In terms of probability of correct response for the median 
+individual, item 1 is the easiest one because the probability of getting a positive 
+response is the highest. Item 3 is the most difficult. As we already found out.
+
+
+The last thing that we need to do is to compute the **FACTOR SCORES**.
+
+We can use the expected posterior:
+```{r}
+fs<-factor.scores(m2,method="EAP")
+fs
+plot(fs$score.dat$z1) 
+```
+There are some expected frequencies lower than 5 for some response pattern so there are
+some sparse data -- the model in this case is not affected because they are few.
+
+The lowest score is associated to the response pattern 0000 while the highest is
+associated to the response pattern 1111.
+
+The sufficiency principle holds so we can compute the components and the total scores.
+```{r}
+resp.pattern<-fs$score.dat[,1:5] 
+total.score<-apply(resp.pattern,1,sum) 
+total.score 
+round(fs$score.dat[order(total.score),],3) # Score according to the conditional expectation
+#ordered according to the total score.
+```
+
+Factor score of the two response pattern that didn't occur in the data set:
+```{r}
+factor.scores(m2,resp.pattern=rbind(c(0,1,1,0,0),c(0,1,0,1,0)))
+```
+Scores are very small because of course there are zero observations for these patterns.
+
+
+
+
+
+
