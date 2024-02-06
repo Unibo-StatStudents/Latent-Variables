@@ -319,7 +319,7 @@ lapply(best_lca_model$probs, round, 3)
 probs <- best_lca_model$P 
 probs_start <- best_lca_model$probs.start
 new_probs_start <- poLCA.reorder(probs_start, order(probs)) # Order by final probabilities received 
-best_lca_ord <- poLCA(formula_lca, data, nclass=n_class_best, probs.start=new_probs_start, verbose=FALSE)
+best_lca_ord <- poLCA(formula_lca, data, nclass=n_class_best, nrep=10, probs.start=new_probs_start, verbose=FALSE)
 round(best_lca_ord$P, 3)
 lapply(best_lca_ord$probs, round, 3)
 

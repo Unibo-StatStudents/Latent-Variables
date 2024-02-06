@@ -1,0 +1,206 @@
+---
+title: "Lab 3"
+output: github_document
+author: "Sebastian Veuskens"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preliminaries 
+## Load libraries 
+
+```{r}
+library(lavaan)         # For Holzinger data 
+library(GPArotation)    # For Factor rotations 
+library(ltm)            # For Abortion data and Item response theory 
+library(poLCA)          # For latent class analysis 
+```
+
+## Load data 
+
+```{r}
+data(HolzingerSwineford1939)
+data(Abortion)
+data(carcinoma)
+data(Mobility)
+```
+
+# Exercise 1 
+
+## Load + display data 
+
+```{r}
+data <- carcinoma
+#################
+head(data)
+dim(data) 
+summary(data)
+str(data)
+heatmap(cor(data), scale='none')
+```
+
+## Fit models with 2, 3 and 4 classes 
+
+```{r}
+p <- ncol(data)
+formula_lca <- cbind(A, B, C, D, E, F, G) ~ 1   # Formula of which columns/variables to include from the data 
+n_classes <- c(2, 3, 4)                                    # Number of latent classes 
+h <- 1                                          # Observation of interest (specific pattern) 
+j <- 1                                          # Class of interest -> Absolute value, not relative position here! 
+pattern_interest <- c(1, 1, 1, 1, 1, 1, 1)      # Pattern of interest  
+h <- 1                                          # Observation of interest 
+#################
+
+## Computation 
+lca_models <- list() 
+for (n_class in n_classes) {
+    cur_model <- poLCA(formula_lca, data, nclass=n_class, nrep=10, verbose=TRUE)
+    lca_models[[n_class]] = cur_model
+}
+
+freq_estim <- data.frame(lca_models[[n_classes[1]]]$predcell[1:(p + 2)])
+for (n_class in n_classes[2:length(n_classes)]) {
+    freq_estim = cbind(freq_estim, lca_models[[n_class]]$predcell[p+2])
+}
+freq_estim
+
+## Results 
+llik <- unlist(purrr::map(lca_models, 'llik'))
+npar <- unlist(purrr::map(lca_models, 'npar'))
+Gsq <- round(unlist(purrr::map(lca_models, 'Gsq')), 3)
+Chisq <- unlist(purrr::map(lca_models, 'Chisq'))
+df <- unlist(purrr::map(lca_models, 'resid.df'))
+aic <- unlist(purrr::map(lca_models, 'aic'))
+bic <- unlist(purrr::map(lca_models, 'bic'))
+p_value <- round(1 - pchisq(Chisq, df), 3)
+
+# Choose the one with lowest AIC/BIC 
+summ <- data.frame(n_classes, llik, npar, Gsq, Chisq, df, p_value, aic, bic)
+
+summ
+
+which.min(aic) == which.min(bic)
+n_class_best <- n_classes[which.min(bic)]
+n_class_best <- 3
+best_lca_model <- lca_models[[n_class_best]]
+# Patterns and observed vs. expected frequencies 
+best_lca_model$predcell 
+# Prior for class (y)
+round(best_lca_model$P, 3)
+# Conditional on class (y): g(x_i|y = j) for each j and item i 
+lapply(best_lca_model$probs, round, 3)
+```
+
+# 7 Reorder 
+
+```{r}
+## Reorder to receive comparable results (order by the prior for y -> from lowest to highest)
+probs <- best_lca_model$P 
+probs_start <- best_lca_model$probs.start
+new_probs_start <- poLCA.reorder(probs_start, order(probs)) # Order by final probabilities received 
+best_lca_ord <- poLCA(formula_lca, data, nclass=n_class_best, probs.start=new_probs_start, verbose=FALSE)
+round(best_lca_ord$P, 3)
+lapply(best_lca_ord$probs, round, 3)
+```
+
+# 8 
+
+```{r}
+
+## Posterior probabilities for classes 
+best_lca_ord$posterior                              # Probability of observation h (rows) to be in class j (columns)
+round(best_lca_ord$posterior[h,], 3)                # Class probabilities for observation h 
+# Predicted classes 
+best_lca_ord$predclass 
+table(best_lca_ord$predclass)
+unique(data[best_lca_ord$predclass==j,])            # All (unique) patterns that are predicted to be class j in the data  
+# Get observations of class j 
+data[best_lca_ord$predclass == j,]
+
+```
+
+# 9  
+
+```{r}
+outcome <- c(1, 1, 1, 1, 1, 1, 1)               # For joint and posterior probability estimation 
+length(outcome) == p
+jointp_outcome <- list() 
+for (class in 1:n_class_best) {
+    current <- probs[class]
+    for (item in 1:p) {
+        current <- current * best_lca_ord$probs[[item]][class, outcome[item]]
+    }
+    jointp_outcome[[class]] <- current 
+}
+jointp_outcome <- unlist(jointp_outcome)
+# Joint probabilities f(x, y_j) for each j 
+round(jointp_outcome, 5)
+# Just probability of receiving observation outcome in general (independent of class) f(x) 
+sum(jointp_outcome)
+# poLCA.predcell(best_lca_ord, y=outcome)
+# Posterior probabilities 
+round(jointp_outcome / sum(jointp_outcome), 5)
+poLCA.posterior(best_lca_ord, outcome)
+```
+
+```{r}
+sel <- data[best_lca_ord$predclass == 1,]
+sum(sel[2,])
+apply(sel, 1, sum) - 7
+```
+
+# Exercise 2
+
+## 1
+
+```{r}
+
+```
+
+## 2
+
+```{r}
+
+```
+## 1
+
+```{r}
+
+```
+## 1
+
+```{r}
+
+```
+## 1
+
+```{r}
+
+```
+## 1
+
+```{r}
+
+```
+## 1
+
+```{r}
+
+```
+## 1
+
+```{r}
+
+```
+## 1
+
+```{r}
+
+```
+## 1
+
+```{r}
+
+```
