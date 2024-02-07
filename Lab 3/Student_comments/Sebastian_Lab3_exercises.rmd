@@ -162,7 +162,8 @@ apply(sel, 1, sum) - 7
 ## 2
 
 ```{r}
-
+b <- apply(best_lca_ord$y, 1, sum) - 7
+table(best_lca_ord$predclass, b)
 ```
 ## 1
 

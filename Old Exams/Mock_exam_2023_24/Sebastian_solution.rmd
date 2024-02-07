@@ -1,0 +1,182 @@
+---
+title: "Mock exam"
+output: github_document
+author: "Sebastian Veuskens"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preliminaries 
+## Load libraries 
+
+```{r}
+library(lavaan)         # For Holzinger data 
+library(GPArotation)    # For Factor rotations 
+library(ltm)            # For Abortion data and Item response theory 
+library(poLCA)          # For latent class analysis 
+```
+
+## Load data 
+
+```{r}
+cheating <- read.table("Old Exams/Mock_exam_2023_24/cheating.txt")
+head(cheating)
+summary(cheating) 
+cor_mat <- cor(cheating)
+heatmap(cor_mat, scaling='none')
+```
+
+```{r}
+#################
+#### Modify #####
+#################
+data <- cheating 
+formula_ltm <- data~z1 
+q <- 1                                                  # Specify the number of factors used in the model 
+p <- ncol(data)
+i <- 1                                                  # Item to investigate further
+j <- 1                                                  # Factor to investigate further 
+missing_patterns <- rbind(c(1, 0, 0, 1), c(1, 0, 1, 0))
+#################
+
+#### For dichotomous and polytomous (categorical) data (?), describes each item with frequencies #### 
+dsc <- descript(data)
+dsc$perc 
+dsc$items 
+## P-values that test independence between two items (H_0 == independent)
+# This is Goodness of fit (see Latent trait models, marginal frequencies)
+dsc$pw.ass              # Applies the Chi-squared test and second-order margins to check for positive correlation in the data (not in the model!)
+plot(dsc)
+
+ltm_model <- ltm(formula_ltm, IRT.param = TRUE) 
+cbind(ltm_model$pattern$X, ltm_model$pattern$obs)
+head(data)
+```
+
+1. There is 16 response patterns (all possible response patterns are observed)
+2. FRAUD is the item with the highest proportion of no's 
+3. (1, 1, 1, 1) was observed 2 times, (0, 0, 0, 0) was observed 207 times 
+4. Item 2 and 4 and item 1 and 4 are not significantly correlated 
+
+## 2
+
+Both models assume a Bernoulli distribution for the likelihood, 
+meaning the probability to receive a positive/negative answer for item i,
+given the value of the underlying factor.
+
+In addition, the prior distribution is the same for the factor 
+(standard (multivariate) normal distribution). 
+
+A main difference is the parametrization. 
+The latent trait model follows the GLLVM framework and consists of 
+a systematic component: $$ and a link function $$, in order to determine $\pi_i(y)$. 
+
+A different parametrization is used for the 2-PL model: Instead of a linear combination + 
+link function, the $\pi_i(y)$ is given by: 
+Here, the discrimination parameters $\alpha_{i1}$ and $\beta_{i1}$ are equivalent and 
+describe, how well an item separates between different values for the latent factor model.
+However, $\alpha_{i0}$ and $\beta_{i0}$ differ: The second one indicates a difficulty parameter 
+(the higher the more difficult), while the first one indicates easyness of an item. 
+
+## 3
+
+```{r}
+#### Latent trait model ####
+## Computation 
+ltm_model <- ltm(formula_ltm, IRT.param = TRUE)         # IRT.param - NEGATIVE difficulty parameter -> indicates which parametrization to use: If TRUE, low value means low difficulty (easy)
+ltm_model_rip <- ltm(formula_ltm, IRT.param=FALSE)
+# From IRT.param = TRUE to IRT.param = False: 
+coefs <- summary(ltm_model)$coefficients
+-coefs[i, j] * coefs[i + p, j]                          # == summary(ltm_model_rip)$coefficients[i, j]
+# Alternative: Rasch model -> All \beta_{i1} are equal to 1, constraint does this (p+1 indicates discrimination parameters)
+# ltm_model <- rasch(data, IRT.param=TRUE, constraint=cbind(p+1, 1))
+coef(ltm_model_rip)
+```
+
+1. The FRAUD is the most difficult one, according to the model. 
+2. LIEEXAM, LIEPAPER, FRAUD, COPYEXAM 
+
+## 5
+
+```{r}
+alpha_zero <- ltm_model_rip$coeff[,1]
+alpha <- ltm_model_rip$coeff[,2]                        # Discrimination parameters 
+# st_alpha <- alpha / sqrt(1 + sum(alpha^2))            # Somehow correlation between item x_i and latent variable y_j 
+st_alpha <- alpha / sqrt(1 + alpha^2)                   # Somehow correlation between item x_i and latent variable y_j 
+st_alpha 
+
+coef(ltm_model, prob=TRUE, order=TRUE) 
+```
+
+1. The standardized alpha for LIEEXAM, LIEPAPER are relatively high, meaning 
+there is a high correlation between the factor and a response. FRAUD is less, but still 
+relatively strong correlated. COPYEXAM is less strong correlated, is dominated by random variation and
+not the factor. 
+2. Most Probable is COPYEXAM with 20% positive answer, while the other three items
+have low positive answer rates between 2% and 5%. 
+
+## 5
+
+```{r}
+
+#### Goodness of fit of model #### 
+fit_model <- fitted(ltm_model)
+fit_model
+
+expected <- fit_model[,ncol(data) + 1]                  # Expected frequencies are in last column in fit_model, before are the items 
+observed <- ltm_model$pattern$obs                       # The frequencies observed in the data 
+patterns <- ltm_model$pattern$X                         # Each pattern that was observed 
+n_pat <- nrow(patterns) 
+
+cbind(patterns, observed, expected)
+
+## Degrees of freedom 
+df <- n_pat - p * (q+1) - 1
+df
+## Chi-square test for complete patterns 
+chi_sq_ltm <- sum((expected - observed)^2 / expected)
+pvalue_chisq <- 1 - pchisq(chi_sq_ltm, df)
+pvalue_chisq
+
+## Likelihood ratio test 
+lr <- 2 * sum(observed * log(observed / expected))      # observed here is same as n in slides               
+pvalue_lr <- 1 - pchisq(lr, df)
+pvalue_lr
+```
+
+See above for numbers.
+
+The tests are not very reliable since there is many patterns with 
+very low (<5) expected observations. 
+
+## 6
+
+It is better to look at the margins, either second or third order margins 
+and test their residuals. 
+
+## 7
+
+```{r}
+factor_scores <- factor.scores(ltm_model, method='EAP') # EAP: expected apriori pattern - Exp means expected, not exponent or so 
+factor_scores                                           # I think low scores for z1 etc. mean low ability/agreement for these individiual with that certain pattern 
+plot(factor_scores$score.dat$z1)
+
+resp_pattern <- factor_scores$score.dat[,1:p]
+tot_scores <- apply(resp_pattern, 1, sum)                # Number of positive responses per pattern (sum of ones)  
+tot_scores  
+plot(tot_scores, factor_scores$score.dat$z1)
+## Visualize 
+plot(ltm_model, legend=TRUE, cx = "bottomright", xlab="Attitude toward/Difficulty", lwd=3, cex.main=1.5, cex.lab = 1.3, cex=1.1)
+```
+
+It measures mostly the attitude to cheat in exams, while the LIEEXAM and LIEPAPER 
+items are much clearer separated by the factor than the other two items. 
+Thus, it measures the keeness to ly about an exam or paper. 
+
+## 5
+
+```{r}
+
+```

@@ -25,6 +25,7 @@ data(HolzingerSwineford1939)
 data(Abortion)
 data(carcinoma)
 data(Mobility)
+scitec <- read.table("Lab 3/Example UVA/scie7i.dat", header=F)
 ```
 
 # Exploratory Analysis 
@@ -131,6 +132,9 @@ heatmap(oblimin(loadings(fac_model))$loadings, scale='none')
 cfa_model <- cfa(formula_cfa, data = data, std.lv = FALSE, orthogonal = FALSE) 
 # cfa_model <- cfa(formula_cfa, sample.cov=cov_mat, sample.nobs=n_obs, std.lv = FALSE) 
 summary(cfa_model, fit.measures = TRUE)
+# CFI: should be over 0.8 or 0.9
+# TLI: should be over 0.8 or 0.9
+# RMSEA: should lower than 0.08 
 ```
 
 # Item response theory/Response function approach 
@@ -151,6 +155,8 @@ Use IRT.param = FALSE -> use alpha parametrization
 The component scores for the $j$'s factor are in general are:
 $sum_{i=1}^p \alpha_{ij} x_i$
 Thus, for latent trait models it is just the sum of $\alpha_{ij}$'s for which $x_i=1$. 
+
+## General 
 
 ```{r}
 #################
@@ -195,7 +201,7 @@ coef(ltm_model, prob=TRUE, order=TRUE)                  # Same as summary + prob
 summary(ltm_model)$coefficients[i, j]                   # Access the estimate values 
 
 alpha_zero <- ltm_model_rip$coeff[,1]
-alpha <- ltm_model$coeff[,2]                            # Discrimination parameters 
+alpha <- ltm_model_rip$coeff[,2]                            # Discrimination parameters 
 # st_alpha <- alpha / sqrt(1 + sum(alpha^2))            # Somehow correlation between item x_i and latent variable y_j 
 st_alpha <- alpha / sqrt(1 + alpha^2)                   # Somehow correlation between item x_i and latent variable y_j 
 st_alpha 
@@ -261,6 +267,28 @@ round(tab[order(tot_scores),], 3)
 factor.scores(ltm_model, resp.pattern=missing_patterns)
 ```
 
+## UVA 
+
+```{r}
+#################
+#### Modify #####
+#################
+data <- scitec 
+formula_uva <- 'f1=~V1+V3+V4+V7'            # Formula to be confirmed 
+data_cols <- c(1, 3, 4, 7)                  # Should be same as in formula_uva 
+data_col_names <- c('V1', 'V3', 'V4', 'V7') # The variables that are ordinal (here all)
+#################
+#### Confirmatory Analysis ####
+## UVA (Underlying Variable Approach)
+# std.lv sets variances of latent variables to zero (for identifiability)
+fit_uva <- cfa(formula_uva, data=data[,data_cols], ordered=data_col_names, std.lv=TRUE)
+summary(fit_uva, fit.measures=TRUE)
+# CFI: should be over 0.8 or 0.9
+# TLI: should be over 0.8 or 0.9
+# RMSEA: should lower than 0.08 
+# Number of threshoulds is number of factors - 1 
+```
+
 # Latent class analysis 
 
 ```{r}
@@ -270,7 +298,7 @@ factor.scores(ltm_model, resp.pattern=missing_patterns)
 data <- carcinoma                               # Has to be dichotomous - only one and two as values
 p <- ncol(data)
 formula_lca <- cbind(A, B, C, D, E, F, G) ~ 1   # Formula of which columns/variables to include from the data 
-n_classes <- c(2, 3, 4)                                    # Number of latent classes 
+n_classes <- c(2, 3, 4)                         # Number of latent classes 
 h <- 1                                          # Observation of interest (specific pattern) 
 j <- 1                                          # Class of interest -> Absolute value, not relative position here! 
 outcome <- c(2, 2, 2, 2, 2, 2, 2)               # For joint and posterior probability estimation 
