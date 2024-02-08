@@ -156,7 +156,8 @@ apply(sel, 1, sum) - 7
 ## 1
 
 ```{r}
-
+round(poLCA.posterior(m.4.ord, c(1, 1, 1, 1, 1, 1, 1, 1)), 5)
+poLCA.predcell(m.4.ord, c(1, 1, 1, 1, 1, 1, 1, 1))
 ```
 
 ## 2

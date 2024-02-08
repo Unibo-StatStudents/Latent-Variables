@@ -40,7 +40,10 @@ head(data)
 dim(data) 
 summary(data)
 str(data)
-heatmap(cor(data), scale='none')
+unique(data)                            # Patterns 
+nrow(unique(data))                      # Number of patterns 
+heatmap(cor(data), scale='none')        # Correlation structure 
+table(apply(data, 1, sum))              # Total scores 
 ```
 
 # Normal linear factor Model
@@ -84,7 +87,7 @@ best_n_fac <- n_facs[which.max(unlist(p_value))]
 fac_model <- fac_models[[best_n_fac]]
 
 ## Model statistics 
-
+round(unlist(p_value), 5)
 chi_sq[[best_n_fac]]
 df[[best_n_fac]]
 p_value[[best_n_fac]]
@@ -104,6 +107,7 @@ perc_var
 #### Results #### 
 ## Individual scores  
 ind_scores <- fac_model$scores 
+
 ## Reproduced correlation matrix 
 rep_corr <- loadings(fac_model) %*% t(loadings(fac_model)) 
 rep_corr
@@ -135,6 +139,8 @@ summary(cfa_model, fit.measures = TRUE)
 # CFI: should be over 0.8 or 0.9
 # TLI: should be over 0.8 or 0.9
 # RMSEA: should lower than 0.08 
+# The baseline model is a model that just estimates the p variances of the 
+# items and assumes all Covariances as 0 -> assumes independence of items 
 ```
 
 # Item response theory/Response function approach 
@@ -191,17 +197,19 @@ coefs <- summary(ltm_model)$coefficients
 # ltm_model <- rasch(data, IRT.param=TRUE, constraint=cbind(p+1, 1))
 
 ## Test models 
-ltm_model_no_con <- rasch(data, IRT.param=TRUE)
 ltm_model_con <- rasch(data, IRT.param=TRUE, constraint=cbind(p+1, 1))
+ltm_model_no_con <- rasch(data, IRT.param=TRUE)
+summary(ltm_model_con)
+coef(ltm_model_con, prob=TRUE, order=TRUE)
 anova(ltm_model_con, ltm_model_no_con)                  # The lower AIC and BIC, the better 
 
 ## Results 
 summary(ltm_model)                                      # Gives estimates for difficulties and discrimination parameters (beta_i0 and beta_i1)                      
-coef(ltm_model, prob=TRUE, order=TRUE)                  # Same as summary + probabilities of median individual 
+coef(ltm_model_rip, prob=TRUE, order=TRUE)              # Same as summary + probabilities of median individual 
 summary(ltm_model)$coefficients[i, j]                   # Access the estimate values 
 
 alpha_zero <- ltm_model_rip$coeff[,1]
-alpha <- ltm_model_rip$coeff[,2]                            # Discrimination parameters 
+alpha <- ltm_model_rip$coeff[,2]                        # Discrimination parameters 
 # st_alpha <- alpha / sqrt(1 + sum(alpha^2))            # Somehow correlation between item x_i and latent variable y_j 
 st_alpha <- alpha / sqrt(1 + alpha^2)                   # Somehow correlation between item x_i and latent variable y_j 
 st_alpha 
@@ -234,9 +242,11 @@ pvalue_lr <- 1 - pchisq(lr, df)
 pvalue_lr
 
 ## Bootstrap for Rasch model 
-pvalue_boot <- GoF.rasch(ltm_model, B=200)
+pvalue_boot <- GoF.rasch(ltm_model_con, B=200)
 pvalue_boot$Tobs
 pvalue_boot
+# Asymptotic p-value -> Can be used for Rasch models in addition to previous p-value 
+pvalue_asymp <- pchisq(pvalue_boot$Tobs, df=nrow(unique(data)) - 1 - ncol(data)) 
 
 ## Check two and three-way margins 
 margins(ltm_model)
@@ -250,7 +260,8 @@ plot(factor_scores$score.dat$z1)
 
 ## Total number of ones for each pattern 
 resp_pattern <- factor_scores$score.dat[,1:p]
-tot_scores <- apply(resp_pattern, 1, sum)                # Number of positive responses per pattern (sum of ones)  
+tot_scores <- apply(resp_pattern, 1, sum)               # Number of positive responses per pattern (sum of ones)  
+tot_scores  == apply(unique(data), 1, sum)              # Just a slightly different way to calculate the same thing 
 tot_scores  
 plot(tot_scores, factor_scores$score.dat$z1)
 
@@ -310,7 +321,7 @@ h <- 1                                          # Observation of interest
 lca_models <- list() 
 for (n_class in n_classes) {
     cur_model <- poLCA(formula_lca, data, nclass=n_class, nrep=10, verbose=FALSE)
-    lca_models[[n_class]] = cur_model
+    lca_models[[n_class]] <- cur_model
 }
 
 freq_estim <- data.frame(lca_models[[n_classes[1]]]$predcell[1:(p + 2)])

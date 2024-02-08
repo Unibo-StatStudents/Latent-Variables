@@ -24,7 +24,7 @@
 
 # In this case this is not a raw data set but it is a CORRELATION MATRIX, 
 # so we don't have information about individuals.
-cormat <- read.table("socmob.txt")
+cormat <- read.table("Lab 1/socmob.txt")
 cormat
 
 # It is a correlation matrix where between V8 and V9 (variables related to firstborn qualification 

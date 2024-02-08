@@ -116,6 +116,7 @@ They are all good. All the pairwise association between the item is explaind by 
 Three-way margins
 ```{r}
 margins(m1,type="three-way",nprint=2)
+
 margins(m1,type="three-way",nprint=3)
 ```
 There are some problems for items (2,3,4) and (1,3,5). The model doesn't explain
@@ -146,7 +147,7 @@ discrimination parameter.
 To go from one parametrisation to the other the formula are:
 ```{r}
 summary(m2)$coefficients[1,1]*summary(m2)$coefficients[6,1] #To get the GLLVM parameter
-summary(m2.rip)$coefficients[1,1] #To get the IRT parameter
+summary(m2.rip)$coefficients[1,1] / summary(m2.rip)$coefficients[6,1] #To get the IRT parameter
 ```
 
 In this package for the Rash model there are a lot of possibilities like for example it is

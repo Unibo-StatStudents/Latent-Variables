@@ -9,7 +9,7 @@ library(lavaan)
 
 # Now, taking advantage of this solution (knowing which items relate to which 
 # class), and try the underlying variable approach, and show it it relates to 
-data = read.table("scie7i.dat", header=F)
+data = read.table("Lab 3/Example UVA/scie7i.dat", header=F)
 
 
 # 1.) Model 1 factor ####

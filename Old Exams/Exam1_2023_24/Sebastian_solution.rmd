@@ -1,0 +1,188 @@
+---
+title: "Exam 1 - 2023/24"
+output: github_document
+author: "Sebastian Veuskens"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preliminaries 
+## Load libraries 
+
+```{r}
+library(lavaan)         # For Holzinger data 
+library(GPArotation)    # For Factor rotations 
+library(ltm)            # For Abortion data and Item response theory 
+library(poLCA)          # For latent class analysis 
+```
+
+## Load data 
+
+```{r}
+lat <- read.table('Old Exams/Exam1_2023_24/lat.dat', header=TRUE)
+head(lat)
+str(lat)
+data <- na.omit(lat) 
+cov_mat <- cor(data)
+heatmap(cov_mat)
+
+p <- ncol(data)
+formula_lca <- cbind(Writi, Throw, Hamme, Washi, Combi, Lifti) ~ 1   # Formula of which columns/variables to include from the data 
+n_classes <- c(2, 3, 4, 5)                         # Number of latent classes 
+h <- 1                                          # Observation of interest (specific pattern) 
+j <- 1                                          # Class of interest -> Absolute value, not relative position here! 
+outcome <- c(2, 2, 2, 2, 2, 2, 2)               # For joint and posterior probability estimation 
+pattern_interest <- c(1, 1, 1, 1, 1, 1, 1)      # Pattern of interest  
+h <- 1                  
+```
+
+# 1
+
+Describe the data 
+```{r}
+dsc <- descript(data)
+dsc$perc 
+dsc$items 
+## P-values that test independence between two items (H_0 == independent)
+# This is Goodness of fit (see Latent trait models, marginal frequencies)
+dsc$pw.ass              # Applies the Chi-squared test and second-order margins to check for positive correlation in the data (not in the model!)
+plot(dsc)
+nrow(unique(data))
+
+## Computation 
+lca_models <- list() 
+for (n_class in n_classes) {
+    cur_model <- poLCA(formula_lca, data, nclass=n_class, nrep=10, verbose=FALSE)
+    lca_models[[n_class]] = cur_model
+}
+
+freq_estim <- data.frame(lca_models[[n_classes[1]]]$predcell[1:(p + 2)])
+for (n_class in n_classes[2:length(n_classes)]) {
+    freq_estim = cbind(freq_estim, lca_models[[n_class]]$predcell[p+2])
+}
+freq_estim
+
+## Results 
+llik <- unlist(purrr::map(lca_models, 'llik'))
+npar <- unlist(purrr::map(lca_models, 'npar'))
+Gsq <- round(unlist(purrr::map(lca_models, 'Gsq')), 3)
+Chisq <- unlist(purrr::map(lca_models, 'Chisq'))
+df <- unlist(purrr::map(lca_models, 'resid.df'))
+aic <- unlist(purrr::map(lca_models, 'aic'))
+bic <- unlist(purrr::map(lca_models, 'bic'))
+p_value <- round(1 - pchisq(Chisq, df), 3)
+
+# Choose the one with lowest AIC/BIC 
+summ <- data.frame(n_classes, llik, npar, Gsq, Chisq, df, p_value, aic, bic)
+summ
+
+which.min(aic) == which.min(bic)
+n_class_best <- n_classes[which.min(bic)]
+best_lca_model <- lca_models[[n_class_best]]
+# Patterns and observed vs. expected frequencies 
+best_lca_model$predcell 
+# Prior for class (y)
+round(best_lca_model$P, 3)
+# Conditional on class (y): g(x_i|y = j) for each j and item i 
+lapply(best_lca_model$probs, round, 3)
+
+## Reorder to receive comparable results (order by the prior for y -> from lowest to highest)
+probs <- best_lca_model$P 
+probs_start <- best_lca_model$probs.start
+new_probs_start <- poLCA.reorder(probs_start, order(probs)) # Order by final probabilities received 
+best_lca_ord <- poLCA(formula_lca, data, nclass=n_class_best, nrep=10, probs.start=new_probs_start, verbose=FALSE)
+round(best_lca_ord$P, 3)
+lapply(best_lca_ord$probs, round, 3) 
+```
+
+# 2
+
+```{r}
+
+```
+
+# 3
+
+Yes, it makes sense to perform an LCA model, because there might be some underlying 
+classes/different groups between the children that could indicate for example some general characteristics 
+like right- or lefthanded of a child (or both!). Thus, a latent class model is suited better for such an 
+underlying structure than the general latent trait model. 
+
+In addition, the heatmap of the correlations indicates some strong correlations between the variables. 
+
+```{r}
+
+```
+
+# 4
+
+I pick here the model with 3 latent classes, since it performs best in AIC and BIC measure 
+and additionally has the highest p-value (0.015, which is however still not significant). 
+
+The interpretation here could be that some children are just righthanded and do everything with 
+their right hand (class 3, almost always 1/negative answer for all items). 
+Class 1 is the children that almost for every item answered 2/positive, and can thus 
+be interpreted as left-handed children.
+The class 2 is something in between, they are indecisive and do an average more with the right hand,
+but also some activities with the left hand, and thus can be interpreted as both-handed. 
+
+```{r}
+
+```
+
+# 5
+
+```{r}
+outcome = c(1, 1, 1, 1, 1, 1)
+length(outcome) == p
+jointp_outcome <- list() 
+for (class in 1:n_class_best) {
+    current <- probs[class]
+    for (item in 1:p) {
+        current <- current * best_lca_ord$probs[[item]][class, outcome[item]]
+    }
+    jointp_outcome[[class]] <- current 
+}
+jointp_outcome <- unlist(jointp_outcome)
+
+round(jointp_outcome, 5)
+# Just probability of receiving observation outcome in general (independent of class) f(x) 
+sum(jointp_outcome)
+
+outcome = c(2, 2, 2, 2, 2, 2)
+poLCA.posterior(best_lca_ord, outcome)
+```
+
+# 6
+
+```{r}
+## Posterior probabilities for classes 
+best_lca_ord$posterior                              # Probability of observation h (rows) to be in class j (columns)
+round(best_lca_ord$posterior[h,], 3)                # Class probabilities for observation h 
+# Predicted classes 
+best_lca_ord$predclass 
+table(best_lca_ord$predclass)
+unique(data[best_lca_ord$predclass==j,])            # All (unique) patterns that are predicted to be class j in the data  
+# Get observations of class j 
+data[best_lca_ord$predclass == j,]
+```
+
+# 7
+
+```{r}
+
+```
+
+# 8
+
+```{r}
+
+```
+
+# 9 
+
+```{r}
+
+```

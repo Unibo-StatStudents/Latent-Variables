@@ -1,0 +1,276 @@
+---
+title: "Lab 2"
+output: github_document
+author: "Sebastian Veuskens"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Preliminaries 
+## Load libraries 
+
+```{r}
+library(lavaan)         # For Holzinger data 
+library(GPArotation)    # For Factor rotations 
+library(ltm)            # For Abortion data and Item response theory 
+library(poLCA)          # For latent class analysis 
+```
+
+## Load data 
+
+```{r}
+data(HolzingerSwineford1939)
+data(Abortion)
+data(carcinoma)
+data(Mobility)
+scitec <- read.table("Lab 3/Example UVA/scie7i.dat", header=F)
+```
+
+# 1
+
+```{r}
+data <- Abortion
+head(data)
+dim(data) 
+summary(data)
+str(data)
+unique(data)
+nrow(unique(data))
+heatmap(cor(data), scale='none')
+```
+
+```{r}
+formula_ltm <- data~z1 
+q <- 1                                                  # Specify the number of factors used in the model 
+p <- ncol(data)
+i <- 1                                                  # Item to investigate further
+j <- 1                                                  # Factor to investigate further 
+missing_patterns <- rbind(c(1, 0, 0, 1), c(1, 0, 1, 0))
+```
+
+# 1
+
+```{r}
+#### For dichotomous and polytomous (categorical) data (?), describes each item with frequencies #### 
+dsc <- descript(data)
+dsc$perc 
+dsc$items 
+## P-values that test independence between two items (H_0 == independent)
+# This is Goodness of fit (see Latent trait models, marginal frequencies)
+dsc$pw.ass              # Applies the Chi-squared test and second-order margins to check for positive correlation in the data (not in the model!)
+plot(dsc)
+```
+
+# 2
+
+```{r}
+#### Latent trait model ####
+## Computation 
+ltm_model <- ltm(formula_ltm, IRT.param = TRUE)         # IRT.param - NEGATIVE difficulty parameter -> indicates which parametrization to use: If TRUE, low value means low difficulty (easy)
+ltm_model_rip <- ltm(formula_ltm, IRT.param=FALSE)
+# From IRT.param = TRUE to IRT.param = False: 
+coefs <- summary(ltm_model)$coefficients
+-coefs[i, j] * coefs[i + p, j]                          # == summary(ltm_model_rip)$coefficients[i, j]
+# Alternative: Rasch model -> All \beta_{i1} are equal to 1, constraint does this (p+1 indicates discrimination parameters)
+# ltm_model <- rasch(data, IRT.param=TRUE, constraint=cbind(p+1, 1))
+
+## Test models 
+ltm_model_no_con <- rasch(data, IRT.param=TRUE)
+ltm_model_con <- rasch(data, IRT.param=TRUE, constraint=cbind(p+1, 1))
+anova(ltm_model_con, ltm_model_no_con)                  # The lower AIC and BIC, the better 
+
+## Results 
+summary(ltm_model)                                      # Gives estimates for difficulties and discrimination parameters (beta_i0 and beta_i1)                      
+coef(ltm_model, prob=TRUE, order=TRUE)                  # Same as summary + probabilities of median individual 
+summary(ltm_model)$coefficients[i, j]                   # Access the estimate values 
+
+alpha_zero <- ltm_model_rip$coeff[,1]
+alpha <- ltm_model$coeff[,2]                            # Discrimination parameters -> Use sum if more than one factor variable! 
+# st_alpha <- alpha / sqrt(1 + sum(alpha^2))            # Somehow correlation between item x_i and latent variable y_j 
+st_alpha <- alpha / sqrt(1 + alpha^2)                   # Somehow correlation between item x_i and latent variable y_j 
+st_alpha 
+```
+
+# 6
+
+```{r}
+plot(ltm_model_rip, legend=TRUE, cx = "bottomright", xlab="Attitude toward/Difficulty", lwd=3, cex.main=1.5, cex.lab = 1.3, cex=1.1)
+```
+
+# 7
+
+```{r}
+### Goodness of fit of model #### 
+fit_model <- fitted(ltm_model)
+fit_model
+
+expected <- fit_model[,ncol(data) + 1]                  # Expected frequencies are in last column in fit_model, before are the items 
+observed <- ltm_model$pattern$obs                       # The frequencies observed in the data 
+patterns <- ltm_model$pattern$X                         # Each pattern that was observed 
+n_pat <- nrow(patterns) 
+
+cbind(patterns, observed, expected)
+
+## Degrees of freedom 
+df <- n_pat - p * (q+1) - 1
+df
+## Chi-square test for complete patterns 
+chi_sq_ltm <- sum((expected - observed)^2 / expected)
+pvalue_chisq <- 1 - pchisq(chi_sq_ltm, df)
+pvalue_chisq
+
+## Likelihood ratio test 
+lr <- 2 * sum(observed * log(observed / expected))      # observed here is same as n in slides               
+pvalue_lr <- 1 - pchisq(lr, df)
+pvalue_lr
+
+## Bootstrap for Rasch model 
+pvalue_boot <- GoF.rasch(ltm_model, B=200)
+pvalue_boot$Tobs
+pvalue_boot
+
+## Check two and three-way margins 
+margins(ltm_model)
+margins(ltm_model, type='two-way', nprint=2)          # nprint determines here the number of marginals to print with the largest chi-squared residuals value 
+```
+
+# 9 
+
+```{r}
+#### Factor scores #### 
+## Scores for observed response patterns 
+factor_scores <- factor.scores(ltm_model_rip, method='EAP') # EAP: expected apriori pattern - Exp means expected, not exponent or so 
+factor_scores                                           # I think low scores for z1 etc. mean low ability/agreement for these individiual with that certain pattern 
+plot(factor_scores$score.dat$z1)
+
+## Total number of ones for each pattern 
+resp_pattern <- factor_scores$score.dat[,1:p]
+tot_scores <- apply(resp_pattern, 1, sum)                # Number of positive responses per pattern (sum of ones)  
+tot_scores  
+plot(tot_scores, factor_scores$score.dat$z1)
+
+## Scores for components 
+comp <- factor.scores(ltm_model, method='Component')    # Get the components (z1), which is (for latent trait): sum_{i=1}^p \alpha_{ij} x_i
+comp_scores <- comp$score.dat[,p+3]
+
+## Check ordering, according to total score and factor/component scores ordering (which are equivalent)
+tab <- cbind(factor_scores$score.dat, comp_scores, tot_scores)
+round(tab, 3)
+round(tab[order(tot_scores),], 3)
+
+## Compute scores for missing patterns 
+factor.scores(ltm_model, resp.pattern=missing_patterns)
+```
+
+# Exercise 2 
+
+```{r}
+#################
+#### Modify #####
+#################
+data <- LSAT 
+formula_ltm <- data~z1 
+q <- 1                                                  # Specify the number of factors used in the model 
+p <- ncol(data)
+i <- 1                                                  # Item to investigate further
+j <- 1                                                  # Factor to investigate further 
+missing_patterns <- 
+#################
+```
+
+```{r}
+head(data)
+dim(data) 
+summary(data)
+str(data)
+unique(data)
+nrow(unique(data))
+heatmap(cor(data), scale='none')
+```
+
+## 1
+
+```{r}
+#### For dichotomous and polytomous (categorical) data (?), describes each item with frequencies #### 
+dsc <- descript(data)
+dsc$perc 
+dsc$items 
+## P-values that test independence between two items (H_0 == independent)
+# This is Goodness of fit (see Latent trait models, marginal frequencies)
+dsc$pw.ass              # Applies the Chi-squared test and second-order margins to check for positive correlation in the data (not in the model!)
+plot(dsc)
+table(apply(data, 1, sum))
+```
+
+## 3  
+
+```{r}
+ltm_model_con <- rasch(data, IRT.param=TRUE, constraint=cbind(p+1, 1))
+ltm_model_con <- rasch(data, IRT.param=FALSE, constraint=cbind(p+1, 1))
+ltm_model_no_con <- rasch(data, IRT.param=TRUE)
+coef(ltm_model_con, prob=TRUE, order=TRUE)
+anova(ltm_model_con, ltm_model_no_con)                  # The lower AIC and BIC, the better 
+
+summary(ltm_model_con)
+```
+
+## 3.3  
+
+```{r}
+## Bootstrap for Rasch model 
+pvalue_boot <- GoF.rasch(ltm_model_no_con, B=200)
+pvalue_boot$Tobs
+pvalue_boot
+```
+
+## 3.4  
+
+```{r}
+## Check two and three-way margins 
+margins(ltm_model)
+margins(ltm_model_con, type='two-way', nprint=2)          # nprint determines here the number of marginals to print with the largest chi-squared residuals value 
+margins(ltm_model_no_con, type='three-way', nprint=2)          # nprint determines here the number of marginals to print with the largest chi-squared residuals value 
+```
+
+The overall fit of the data is good. 
+
+## 5 
+
+```{r}
+#### Latent trait model ####
+## Computation 
+ltm_model <- ltm(formula_ltm, IRT.param = TRUE)         # IRT.param - NEGATIVE difficulty parameter -> indicates which parametrization to use: If TRUE, low value means low difficulty (easy)
+ltm_model_rip <- ltm(formula_ltm, IRT.param=FALSE)
+anova(ltm_model_no_con, ltm_model)
+```
+## 1 
+
+```{r}
+plot(ltm_model_no_con, legend=TRUE, cx = "bottomright", xlab="Attitude toward/Difficulty", lwd=3, cex.main=1.5, cex.lab = 1.3, cex=1.1)
+```
+## 1 
+
+```{r}
+factor_scores <- factor.scores(ltm_model, method='EAP') # EAP: expected apriori pattern - Exp means expected, not exponent or so 
+factor_scores                                           # I think low scores for z1 etc. mean low ability/agreement for these individiual with that certain pattern 
+plot(factor_scores$score.dat$z1)
+## Total number of ones for each pattern 
+resp_pattern <- factor_scores$score.dat[,1:p]
+tot_scores <- apply(resp_pattern, 1, sum)                # Number of positive responses per pattern (sum of ones)  
+tot_scores  == apply(unique(data), 1, sum)
+plot(tot_scores, factor_scores$score.dat$z1)
+
+factor.scores(ltm_model, resp.pattern=rbind(c(0,1,1,0,0),c(0,1,0,1,0)))
+```
+## 1 
+
+```{r}
+
+```
+## 1 
+
+```{r}
+
+```
